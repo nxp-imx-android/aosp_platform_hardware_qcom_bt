@@ -27,16 +27,18 @@ LOCAL_SRC_FILES := \
         src/hci_uart.c \
         src/hci_smd.c \
         src/hw_rome.c \
-        src/hw_ar3k.c \
-        src/bt_vendor_persist.cpp
+        src/hw_ar3k.c
 
+ifneq ($(TARGET_USES_AOSP),true)
 #Disable this flag in case if FM over UART support not needed
 ifeq ($(QCOM_BT_FM_OVER_UART),true)
 LOCAL_CFLAGS := -DFM_OVER_UART
 endif
+endif
 
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 LOCAL_CFLAGS += -DPANIC_ON_SOC_CRASH
+LOCAL_CFLAGS += -DENABLE_DBG_FLAGS
 endif
 
 LOCAL_C_INCLUDES += \
@@ -45,6 +47,11 @@ LOCAL_C_INCLUDES += \
         system/bt/hci/include \
         $(TARGET_OUT_HEADERS)/bt/hci_qcomm_init \
         $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
+
+ifeq ($(TARGET_COMPILE_WITH_MSM_KERNEL),true)
+LOCAL_ADDITIONAL_DEPENDENCIES += \
+$(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
+endif
 
 ifeq ($(BOARD_HAS_QCA_BT_AR3002), true)
 LOCAL_C_FLAGS := \
@@ -57,22 +64,16 @@ endif #WIFI_BT_STATUS_SYNC
 
 LOCAL_SHARED_LIBRARIES := \
         libcutils \
-        liblog \
-        libbtnv
+        liblog
 
 LOCAL_MODULE := libbt-vendor
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_CLASS := SHARED_LIBRARIES
 LOCAL_MODULE_OWNER := qcom
 
-ifdef TARGET_2ND_ARCH
-LOCAL_MODULE_PATH_32 := $(TARGET_OUT_VENDOR)/lib
-LOCAL_MODULE_PATH_64 := $(TARGET_OUT_VENDOR)/lib64
-else
-LOCAL_MODULE_PATH := $(TARGET_OUT_VENDOR_SHARED_LIBRARIES)
-endif
+LOCAL_VENDOR_MODULE := true
 
-LOCAL_CFLAGS += -DBT_NV_SUPPORT
+#LOCAL_CFLAGS += -DBT_NV_SUPPORT
 
 ifneq ($(BOARD_ANT_WIRELESS_DEVICE),)
 LOCAL_CFLAGS += -DENABLE_ANT

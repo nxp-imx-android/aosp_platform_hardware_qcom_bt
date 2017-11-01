@@ -43,6 +43,12 @@ typedef enum {
 }bt_soc_type;
 
 typedef enum {
+    FM_VND_OP_POWER_CTRL = (unsigned int)BT_VND_OP_A2DP_OFFLOAD_STOP + 1,
+    BT_VND_OP_FM_USERIAL_OPEN,
+    BT_VND_OP_FM_USERIAL_CLOSE,
+}bt_fm_serial;
+
+typedef enum {
     BT_VND_OP_ANT_USERIAL_OPEN = 254,
     BT_VND_OP_ANT_USERIAL_CLOSE
 }ant_serial;
@@ -63,6 +69,7 @@ typedef enum {
 #define HCI_CMD_PREAMBLE_SIZE 3
 #define HCI_EVT_CMD_CMPL_STATUS_RET_BYTE   5
 #define HCI_EVT_CMD_CMPL_OPCODE        3
+#define BT_PWR_CNTRL_DEVICE    "/dev/btpower"
 
 enum {
     BT_STATUS_SUCCESS = 0,
@@ -71,7 +78,7 @@ enum {
     BT_STATUS_NOMEM,
     BT_STATUS_PROP_FAILURE,
 };
-
+#define BT_CMD_PWR_CTRL         0xbfad
 struct bt_qcom_struct {
     int fd[2];
     int ant_fd;
@@ -83,8 +90,7 @@ struct bt_qcom_struct {
     char *rfkill_state;
     bool enable_extldo;
 };
-extern struct bt_qcom_struct *q;
-extern pthread_mutex_t q_lock;
+extern struct bt_qcom_struct q;
 
 #endif /* BT_VENDOR_QCOM_H */
 
