@@ -1,5 +1,5 @@
 # TODO:  Find a better way to separate build configs for ADP vs non-ADP devices
-ifneq ($(TARGET_BOARD_AUTO),true)
+ifneq ($(BOARD_IS_AUTOMOTIVE),true)
   ifneq ($(filter msm8960 msm8x27 msm8226,$(TARGET_BOARD_PLATFORM)),)
     include $(call all-named-subdir-makefiles,msm8960)
   else
@@ -13,8 +13,8 @@ ifneq ($(TARGET_BOARD_AUTO),true)
           #For msm8909 target
           include $(call all-named-subdir-makefiles,msm8909)
         else
-          ifneq ($(filter msmcobalt,$(TARGET_BOARD_PLATFORM)),)
-            include $(call all-named-subdir-makefiles,msmcobalt)
+          ifneq ($(filter msm8998,$(TARGET_BOARD_PLATFORM)),)
+            include $(call all-named-subdir-makefiles,msm8998)
           endif
         endif
       endif
