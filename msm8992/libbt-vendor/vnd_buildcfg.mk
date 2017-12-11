@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-intermediates := $(local-intermediates-dir)
+intermediates := $(local-generated-sources-dir)
 
 SRC := $(call my-dir)/include/$(addprefix vnd_, $(addsuffix .txt,$(basename $(TARGET_DEVICE))))
 ifeq (,$(wildcard $(SRC)))
@@ -22,7 +22,7 @@ ifeq (,$(wildcard $(SRC)))
 SRC := $(call my-dir)/include/vnd_generic.txt
 endif
 GEN := $(intermediates)/vnd_buildcfg.h
-TOOL := $(LOCAL_PATH)/gen-buildcfg.sh
+TOOL := $(TOP_DIR)hardware/qcom/bt/libbt-vendor/gen-buildcfg.sh
 
 $(GEN): PRIVATE_PATH := $(call my-dir)
 $(GEN): PRIVATE_CUSTOM_TOOL = $(TOOL) $< $@

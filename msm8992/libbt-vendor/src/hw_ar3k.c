@@ -38,6 +38,7 @@ extern "C" {
 #include <utils/Log.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/uio.h>
 #include <signal.h>
 #include <time.h>
 #include <errno.h>
