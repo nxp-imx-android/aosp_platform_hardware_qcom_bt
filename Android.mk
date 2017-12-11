@@ -21,3 +21,7 @@ ifneq ($(BOARD_IS_AUTOMOTIVE),true)
     endif
   endif
 endif
+
+ifeq ($(BOARD_HAVE_BLUETOOTH_QCOM),true)
+	include $(call all-named-subdir-makefiles, msm8992)
+endif # BOARD_HAVE_BLUETOOTH_QCOM
