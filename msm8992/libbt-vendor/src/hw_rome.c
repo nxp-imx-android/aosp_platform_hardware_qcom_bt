@@ -55,6 +55,9 @@ extern "C" {
 #include "hci_uart.h"
 #include "hw_rome.h"
 
+
+#define BT_VERSION_FILEPATH "/data/misc/bluedroid/bt_fw_version.txt"
+
 #ifdef __cplusplus
 }
 #endif
@@ -77,7 +80,9 @@ char *fw_su_info = NULL;
 unsigned short fw_su_offset =0;
 extern char enable_extldo;
 unsigned char wait_vsc_evt = TRUE;
-
+//bool patch_dnld_pending = FALSE;
+unsigned char patch_dnld_pending = FALSE;
+int dnld_fd = -1;
 /******************************************************************************
 **  Extern variables
 ******************************************************************************/
@@ -115,6 +120,7 @@ int do_write(int fd, unsigned char *buf,int len)
     return len;
 }
 
+int read_vs_hci_event(int fd, unsigned char* buf, int size);
 int get_vs_hci_event(unsigned char *rsp)
 {
     int err = 0;
@@ -173,6 +179,16 @@ int get_vs_hci_event(unsigned char *rsp)
                                                 rsp[PATCH_SOC_VER_OFFSET]  ));
                 }
 
+                if (NULL != (btversionfile = fopen(BT_VERSION_FILEPATH, "wb"))) {
+                    fprintf(btversionfile, "Bluetooth Controller Product ID    : 0x%08x\n", productid);
+                    fprintf(btversionfile, "Bluetooth Controller Patch Version : 0x%04x\n", patchversion);
+                    fprintf(btversionfile, "Bluetooth Controller Build Version : 0x%04x\n", rome_ver);
+                    fprintf(btversionfile, "Bluetooth Controller SOC Version   : 0x%08x\n", soc_id);
+                    fclose(btversionfile);
+                }else {
+                    ALOGI("Failed to dump SOC version info. Errno:%d", errno);
+                }
+
                 /* Rome Chipset Version can be decided by Patch version and SOC version,
                 Upper 2 bytes will be used for Patch version and Lower 2 bytes will be
                 used for SOC as combination for BT host driver */
@@ -213,6 +229,12 @@ int get_vs_hci_event(unsigned char *rsp)
                 *(build_label+build_lbl_len) = '\0';
 
                 ALOGI("BT SoC FW SU Build info: %s, %d", build_label, build_lbl_len);
+                if (NULL != (btversionfile = fopen(BT_VERSION_FILEPATH, "a+b"))) {
+                    fprintf(btversionfile, "Bluetooth Contoller SU Build info  : %s\n", build_label);
+                    fclose(btversionfile);
+                } else {
+                    ALOGI("Failed to dump  FW SU build info. Errno:%d", errno);
+                }
             break;
         }
         break;
@@ -253,6 +275,21 @@ int get_vs_hci_event(unsigned char *rsp)
             {
                ALOGD("%s: WiPower feature supported!!", __FUNCTION__);
                property_set("persist.bluetooth.a4wp", "true");
+            }
+            break;
+        case HCI_VS_STRAY_EVT:
+            /* WAR to handle stray Power Apply EVT during patch download */
+            ALOGD("%s: Stray HCI VS EVENT", __FUNCTION__);
+            if (patch_dnld_pending && dnld_fd != -1)
+            {
+                unsigned char rsp[HCI_MAX_EVENT_SIZE];
+                memset(rsp, 0x00, HCI_MAX_EVENT_SIZE);
+                read_vs_hci_event(dnld_fd, rsp, HCI_MAX_EVENT_SIZE);
+            }
+            else
+            {
+                ALOGE("%s: Not a valid status!!!", __FUNCTION__);
+                err = -1;
             }
             break;
         default:
@@ -358,7 +395,7 @@ int hci_send_vs_cmd(int fd, unsigned char *cmd, unsigned char *rsp, int size)
     int ret = 0;
 
     /* Send the HCI command packet to UART for transmission */
-    ret = do_write(fd, cmd, size);
+    ret = write(fd, cmd, size);
     if (ret != size) {
         ALOGE("%s: Send failed with ret value: %d", __FUNCTION__, ret);
         goto failed;
@@ -936,6 +973,7 @@ int rome_tlv_dnld_req(int fd, int tlv_size)
 {
     int  total_segment, remain_size, i, err = -1;
     unsigned char wait_cc_evt;
+    unsigned int rom = rome_ver >> 16;
 
     total_segment = tlv_size/MAX_SIZE_PER_TLV_SEGMENT;
     remain_size = (tlv_size < MAX_SIZE_PER_TLV_SEGMENT)?\
@@ -975,13 +1013,13 @@ int rome_tlv_dnld_req(int fd, int tlv_size)
 
     for(i=0;i<total_segment ;i++){
         if ((i+1) == total_segment) {
-             if ((rome_ver >= ROME_VER_1_1) && (rome_ver < ROME_VER_3_2) && (gTlv_type == TLV_TYPE_PATCH)) {
+             if ((rom >= ROME_PATCH_VER_0100) && (rom < ROME_PATCH_VER_0302) && (gTlv_type == TLV_TYPE_PATCH)) {
                /* If the Rome version is from 1.1 to 3.1
                 * 1. No CCE for the last command segment but all other segment
                 * 2. All the command segments get VSE including the last one
                 */
                 wait_cc_evt = !remain_size ? FALSE: TRUE;
-             } else if ((rome_ver == ROME_VER_3_2) && (gTlv_type == TLV_TYPE_PATCH)) {
+             } else if ((rom == ROME_PATCH_VER_0302) && (gTlv_type == TLV_TYPE_PATCH)) {
                 /* If the Rome version is 3.2
                  * 1. None of the command segments receive CCE
                  * 2. No command segments receive VSE except the last one
@@ -996,17 +1034,19 @@ int rome_tlv_dnld_req(int fd, int tlv_size)
              }
         }
 
+        patch_dnld_pending = TRUE;
         if((err = rome_tlv_dnld_segment(fd, i, MAX_SIZE_PER_TLV_SEGMENT, wait_cc_evt )) < 0)
             goto error;
+        patch_dnld_pending = FALSE;
     }
 
-    if ((rome_ver >= ROME_VER_1_1) && (rome_ver < ROME_VER_3_2) && (gTlv_type == TLV_TYPE_PATCH)) {
+    if ((rom >= ROME_PATCH_VER_0100) && (rom < ROME_PATCH_VER_0302) && (gTlv_type == TLV_TYPE_PATCH)) {
        /* If the Rome version is from 1.1 to 3.1
         * 1. No CCE for the last command segment but all other segment
         * 2. All the command segments get VSE including the last one
         */
         wait_cc_evt = remain_size ? FALSE: TRUE;
-    } else if ((rome_ver == ROME_VER_3_2) && (gTlv_type == TLV_TYPE_PATCH)) {
+    } else if ((rom == ROME_PATCH_VER_0302) && (gTlv_type == TLV_TYPE_PATCH)) {
         /* If the Rome version is 3.2
          * 1. None of the command segments receive CCE
          * 2. No command segments receive VSE except the last one
@@ -1019,10 +1059,11 @@ int rome_tlv_dnld_req(int fd, int tlv_size)
            wait_vsc_evt = remain_size ? TRUE: FALSE;
         }
     }
-
+    patch_dnld_pending = TRUE;
     if(remain_size) err =rome_tlv_dnld_segment(fd, i, remain_size, wait_cc_evt);
-
+    patch_dnld_pending = FALSE;
 error:
+    if(patch_dnld_pending) patch_dnld_pending = FALSE;
     return err;
 }
 
@@ -1406,7 +1447,7 @@ int rome_set_baudrate_req(int fd)
 
     /* Total length of the packet to be sent to the Controller */
     size = (HCI_CMD_IND + HCI_COMMAND_HDR_SIZE + VSC_SET_BAUDRATE_REQ_LEN);
-    tcflush(fd,TCIOFLUSH);
+
     /* Flow off during baudrate change */
     if ((err = userial_vendor_ioctl(USERIAL_OP_FLOW_OFF , &flags)) < 0)
     {
@@ -1749,7 +1790,7 @@ static int disable_internal_ldo(int fd)
 int rome_soc_init(int fd, char *bdaddr)
 {
     int err = -1, size = 0;
-
+    dnld_fd = fd;
     ALOGI(" %s ", __FUNCTION__);
 
     /* If wipower charging is going on in embedded mode then start hand off req */
@@ -1841,6 +1882,9 @@ int rome_soc_init(int fd, char *bdaddr)
             nvm_file_path = ROME_NVM_TLV_3_0_2_PATH;
             fw_su_info = ROME_3_2_FW_SU;
             fw_su_offset =  ROME_3_2_FW_SW_OFFSET;
+        case TUFELLO_VER_1_1:
+            rampatch_file_path = TF_RAMPATCH_TLV_1_0_1_PATH;
+            nvm_file_path = TF_NVM_TLV_1_0_1_PATH;
 
 download:
             /* Change baud rate 115.2 kbps to 3Mbps*/
@@ -1886,5 +1930,6 @@ download:
     }
 
 error:
+    dnld_fd = -1;
     return err;
 }

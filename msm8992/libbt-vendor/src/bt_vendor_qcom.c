@@ -25,7 +25,7 @@
  ******************************************************************************/
 
 #define LOG_TAG "bt_vendor"
-#define BLUETOOTH_MAC_ADDR_BOOT_PROPERTY "ro.boot.btmacaddr"
+//#define BLUETOOTH_MAC_ADDR_BOOT_PROPERTY "ro.boot.btmacaddr"
 
 #include <utils/Log.h>
 #include <cutils/properties.h>
@@ -201,7 +201,7 @@ static int get_bt_soc_type()
     ret = property_get("qcom.bluetooth.soc", bt_soc_type, NULL);
     if (ret != 0) {
         ALOGI("qcom.bluetooth.soc set to %s\n", bt_soc_type);
-        if (!strncasecmp(bt_soc_type, "rome", sizeof("rome"))) {
+        if (!strncasecmp(bt_soc_type, "rome_uart", sizeof("rome_uart"))) {
             return BT_SOC_ROME;
         }
         else if (!strncasecmp(bt_soc_type, "ath3k", sizeof("ath3k"))) {
@@ -399,6 +399,7 @@ static int bt_powerup(int en )
         goto done;
     }
 #endif
+#if 0
     ret = asprintf(&enable_ldo_path, "/sys/class/rfkill/rfkill%d/device/extldo", rfkill_id);
     if( (ret < 0 ) || (enable_ldo_path == NULL) )
     {
@@ -419,6 +420,7 @@ static int bt_powerup(int en )
         ALOGI("External LDO has been configured");
         enable_extldo = TRUE;
     }
+#endif
 
     ALOGE("Write %c to rfkill\n", on);
 
@@ -631,7 +633,6 @@ static int op(bt_vendor_opcode_t opcode, void *param)
     uint8_t local_bd_addr_from_prop[6];
     char* tok;
 #endif
-    bool skip_init = true;
 
     ALOGV("bt-vendor : op for %d", opcode);
 
@@ -664,12 +665,7 @@ static int op(bt_vendor_opcode_t opcode, void *param)
                     case BT_SOC_ROME:
                     case BT_SOC_AR3K:
                         /* BT Chipset Power Control through Device Tree Node */
-                        if(nState == BT_VND_PWR_ON && property_get_bool("wc_transport.vnd_power", 0)) {
-                                bt_powerup(BT_VND_PWR_OFF);
-                        }
                         retval = bt_powerup(nState);
-                        if(retval == 0)
-                            property_set("wc_transport.vnd_power", nState == BT_VND_PWR_ON ? "1" : "0");
                     default:
                         break;
                 }
@@ -680,8 +676,19 @@ static int op(bt_vendor_opcode_t opcode, void *param)
             {
                 // call hciattach to initalize the stack
                 if(bt_vendor_cbacks){
+                   if (btSocType ==  BT_SOC_ROME) {
+                       if (is_soc_initialized()) {
                    ALOGI("Bluetooth Firmware and transport layer are initialized");
-                   bt_vendor_cbacks->fwcfg_cb(BT_VND_OP_RESULT_SUCCESS);
+                           bt_vendor_cbacks->fwcfg_cb(BT_VND_OP_RESULT_SUCCESS);
+                       } else {
+                           ALOGE("bt_vendor_cbacks is null or SoC not initialized");
+                           ALOGE("Error : hci, smd initialization Error");
+                           retval = -1;
+                       }
+                   } else {
+                       ALOGI("Bluetooth FW and transport layer are initialized");
+                       bt_vendor_cbacks->fwcfg_cb(BT_VND_OP_RESULT_SUCCESS);
+                   }
                 }
                 else{
                    ALOGE("bt_vendor_cbacks is null");
@@ -698,17 +705,15 @@ static int op(bt_vendor_opcode_t opcode, void *param)
             }
             break;
 #ifdef BT_SOC_TYPE_ROME
-#ifdef ENABLE_ANT
         case BT_VND_OP_ANT_USERIAL_OPEN:
                 ALOGI("bt-vendor : BT_VND_OP_ANT_USERIAL_OPEN");
                 is_ant_req = true;
                 //fall through
 #endif
-#endif
         case BT_VND_OP_USERIAL_OPEN:
             {
                 int (*fd_array)[] = (int (*)[]) param;
-                int fd = -1, fd_filter = -1;
+                int idx, fd;
                 ALOGI("bt-vendor : BT_VND_OP_USERIAL_OPEN");
                 switch(btSocType)
                 {
@@ -731,7 +736,6 @@ static int op(bt_vendor_opcode_t opcode, void *param)
                         break;
                     case BT_SOC_AR3K:
                         {
-                            int idx;
                             fd = userial_vendor_open((tUSERIAL_CFG *) &userial_init_cfg);
                             if (fd != -1) {
                                 for (idx=0; idx < CH_MAX; idx++)
@@ -753,7 +757,6 @@ static int op(bt_vendor_opcode_t opcode, void *param)
                         break;
                     case BT_SOC_ROME:
                         {
-                            int idx;
                             property_get("persist.BT3_2.version", bt_version, false);
                             if (!is_soc_initialized()) {
                                 fd = userial_vendor_open((tUSERIAL_CFG *) &userial_init_cfg);
@@ -819,10 +822,15 @@ static int op(bt_vendor_opcode_t opcode, void *param)
 #endif //BT_NV_SUPPORT
                                     if(rome_soc_init(fd,vnd_local_bd_addr)<0) {
                                         retval = -1;
+                                        userial_clock_operation(fd, USERIAL_OP_CLK_OFF);
                                     } else {
                                         ALOGV("rome_soc_init is completed");
                                         property_set("wc_transport.soc_initialized", "1");
-                                        skip_init = false;
+                                        #ifdef QCOM_BT_SIBS_ENABLE
+                                        userial_clock_operation(fd, USERIAL_OP_CLK_OFF);
+                                        /*Close the UART port*/
+                                        close(fd);
+                                        #endif
                                     }
                                 }
                             }
@@ -830,47 +838,43 @@ static int op(bt_vendor_opcode_t opcode, void *param)
                             property_set("wc_transport.clean_up","0");
                             if (retval != -1) {
 #ifdef BT_SOC_TYPE_ROME
+                                 #ifdef QCOM_BT_SIBS_ENABLE
                                  start_hci_filter();
+                                 #endif
                                  if (is_ant_req) {
                                      ALOGV("connect to ant channel");
-                                     ant_fd = fd_filter = connect_to_local_socket("ant_sock");
+                                     ant_fd = fd = connect_to_local_socket("ant_sock");
                                  }
                                  else
 #endif
                                  {
                                      ALOGV("connect to bt channel");
-                                     vnd_userial.fd = fd_filter = connect_to_local_socket("bt_sock");
+                                 #ifdef QCOM_BT_SIBS_ENABLE
+                                     vnd_userial.fd = fd = connect_to_local_socket("bt_sock");
+                                 #endif
                                  }
 
-                                 if (fd_filter != -1) {
+                                 if (fd != -1) {
                                      ALOGV("%s: received the socket fd: %d is_ant_req: %d\n",
-                                                                 __func__, fd_filter, is_ant_req);
+                                                                 __func__, fd, is_ant_req);
                                      if((strcmp(bt_version, "true") == 0) && !is_ant_req) {
                                          if (rome_ver >= ROME_VER_3_0) {
                                              /*  get rome supported feature request */
                                              ALOGE("%s: %x08 %0x", __FUNCTION__,rome_ver, ROME_VER_3_0);
-                                             rome_get_addon_feature_list(fd_filter);
+                                             rome_get_addon_feature_list(fd);
                                          }
                                      }
-
-                                     if (!skip_init) {
-                                         /* skip if already sent */
-                                         enable_controller_log(fd_filter);
-                                         skip_init = true;
-                                     }
-
+                                     //enable_controller_log(fd);
                                      for (idx=0; idx < CH_MAX; idx++)
-                                         (*fd_array)[idx] = fd_filter;
-                                     retval = 1;
-                                 }
+                                          (*fd_array)[idx] = fd;
+                                          retval = 1;
+                                     }
                                  else {
                                      retval = -1;
                                  }
-                             }
-
-                             if (fd >= 0) {
-                                 userial_clock_operation(fd, USERIAL_OP_CLK_OFF);
-                                 close(fd);
+                             } else {
+                               if (fd >= 0)
+                                  close(fd);
                              }
                         }
                         break;
@@ -881,7 +885,6 @@ static int op(bt_vendor_opcode_t opcode, void *param)
             }
             break;
 #ifdef BT_SOC_TYPE_ROME
-#ifdef ENABLE_ANT
         case BT_VND_OP_ANT_USERIAL_CLOSE:
             {
                 ALOGI("bt-vendor : BT_VND_OP_ANT_USERIAL_CLOSE");
@@ -893,7 +896,6 @@ static int op(bt_vendor_opcode_t opcode, void *param)
                 }
             }
             break;
-#endif
 #endif
         case BT_VND_OP_USERIAL_CLOSE:
             {
@@ -957,7 +959,8 @@ static int op(bt_vendor_opcode_t opcode, void *param)
                             else if (wake_assert == 1)
                                 ALOGV("DEASSERT: Allowing BT-Device to Sleep");
 
-#ifdef QCOM_BT_SIBS_ENABLE
+//need fix, no lpm_set_state_cb defined yet
+#if 0
                             if(bt_vendor_cbacks){
                                 ALOGI("Invoking HCI H4 callback function");
                                bt_vendor_cbacks->lpm_set_state_cb(wake_assert);
@@ -1051,10 +1054,8 @@ static void ssr_cleanup(void) {
 
     if (btSocType == BT_SOC_ROME) {
 #ifdef BT_SOC_TYPE_ROME
-#ifdef ENABLE_ANT
         /*Close both ANT channel*/
         op(BT_VND_OP_ANT_USERIAL_CLOSE, NULL);
-#endif
 #endif
         /*Close both ANT channel*/
         op(BT_VND_OP_USERIAL_CLOSE, NULL);
