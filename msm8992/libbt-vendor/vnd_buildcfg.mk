@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-intermediates := $(local-intermediates-dir)
+intermediates := $(local-generated-sources-dir)
 
 SRC := $(call my-dir)/include/$(addprefix vnd_, $(addsuffix .txt,$(basename $(TARGET_DEVICE))))
 ifeq (,$(wildcard $(SRC)))
