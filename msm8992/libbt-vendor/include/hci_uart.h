@@ -21,7 +21,6 @@
 
 /* Variables to identify the platform */
 /*BT HS UART TTY DEVICE */
-#define BT_HS_UART_DEVICE "/dev/ttymxc2"
 
 /**** baud rates ****/
 #define USERIAL_BAUD_300        0
