@@ -37,6 +37,7 @@
 #include <sys/socket.h>
 #include <cutils/sockets.h>
 #include <linux/un.h>
+#include <time.h>
 #ifdef BT_NV_SUPPORT
 #include "bt_vendor_persist.h"
 #endif
@@ -319,7 +320,7 @@ static int bt_powerup(int en )
 {
     char rfkill_type[64], *enable_ldo_path = NULL;
     char type[16], enable_ldo[6];
-    int fd, size, i, ret, fd_ldo;
+    int fd, size, i, ret, fd_ldo, retry;
 
     char disable[PROPERTY_VALUE_MAX];
     char state;
@@ -356,13 +357,28 @@ static int bt_powerup(int en )
         snprintf(rfkill_type, sizeof(rfkill_type), "/sys/class/rfkill/rfkill%d/type", i);
         if ((fd = open(rfkill_type, O_RDONLY)) < 0)
         {
-            ALOGE("open(%s) failed: %s (%d)\n", rfkill_type, strerror(errno), errno);
+            ALOGE("open(%s) failed,retrying: %s (%d)\n", rfkill_type, strerror(errno), errno);
+
+            for(retry=0;retry<8;retry++)
+            {
+                if((fd = open(rfkill_type, O_RDONLY)) >= 0)
+                    break;
+                sleep(1);
+                ALOGE("retrying open(%s), %d times\n", rfkill_type,retry);
+            }
 
 #ifdef WIFI_BT_STATUS_SYNC
             bt_semaphore_release(lock_fd);
             bt_semaphore_destroy(lock_fd);
 #endif
-            return -1;
+            if(fd<0)
+                return -1;
+            else
+            {
+                property_set("bluetooth.rfkill_initialized", "1");
+                sleep(1);
+                ALOGE("Setup bluetooth rfkill sys node properity\n");
+            }
         }
 
         size = read(fd, &type, sizeof(type));
