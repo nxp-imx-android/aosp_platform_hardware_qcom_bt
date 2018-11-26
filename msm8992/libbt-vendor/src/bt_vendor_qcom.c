@@ -272,14 +272,14 @@ void stop_hci_filter() {
        char value[PROPERTY_VALUE_MAX] = {'\0'};
        ALOGV("%s: Entry ", __func__);
 
-       property_get("wc_transport.start_hci", value, "false");
+       property_get("vendor.wc_transport.start_hci", value, "false");
 
        if (strcmp(value, "false") == 0) {
            ALOGV("%s: hci_filter has been stopped already", __func__);
            return;
        }
 
-       property_set("wc_transport.start_hci", "false");
+       property_set("vendor.wc_transport.start_hci", "false");
        property_set("wc_transport.hci_filter_status", "0");
        ALOGV("%s: Exit ", __func__);
 }
@@ -290,7 +290,7 @@ void start_hci_filter() {
        char value[PROPERTY_VALUE_MAX] = {'\0'};
 
 
-       property_get("wc_transport.start_hci", value, false);
+       property_get("vendor.wc_transport.start_hci", value, false);
 
        if (strcmp(value, "true") == 0) {
            ALOGV("%s: hci_filter has been started already", __func__);
@@ -299,7 +299,7 @@ void start_hci_filter() {
 
        property_set("wc_transport.hci_filter_status", "0");
 
-       property_set("wc_transport.start_hci", "true");
+       property_set("vendor.wc_transport.start_hci", "true");
        //sched_yield();
        for(i=0; i<45; i++) {
           property_get("wc_transport.hci_filter_status", value, "0");
@@ -375,7 +375,7 @@ static int bt_powerup(int en )
                 return -1;
             else
             {
-                property_set("bluetooth.rfkill_initialized", "1");
+                property_set("vendor.bluetooth.rfkill_initialized", "1");
                 sleep(1);
                 ALOGE("Setup bluetooth rfkill sys node properity\n");
             }
