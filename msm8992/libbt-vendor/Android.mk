@@ -60,11 +60,6 @@ LOCAL_SHARED_LIBRARIES := \
         libcutils \
         liblog
 
-
-# if read from bt nv
-#        libbtnv
-#LOCAL_CFLAGS += -DBT_NV_SUPPORT
-
 LOCAL_CFLAGS += -Wno-error
 ifeq ($(BOARD_WLAN_DEVICE),UNITE)
 LOCAL_MODULE := libbt-vendor-unite-qca
@@ -74,8 +69,6 @@ endif
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_CLASS := SHARED_LIBRARIES
 LOCAL_MODULE_OWNER := qcom
-
-#LOCAL_CFLAGS += -DBT_NV_SUPPORT
 
 ifdef TARGET_2ND_ARCH
 LOCAL_MODULE_PATH_32 := $(TARGET_OUT_VENDOR)/lib
