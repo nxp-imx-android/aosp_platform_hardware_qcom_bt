@@ -61,7 +61,7 @@ LOCAL_SHARED_LIBRARIES := \
         liblog
 
 LOCAL_CFLAGS += -Wno-error
-ifeq ($(BOARD_WLAN_DEVICE),UNITE)
+ifeq ($(BOARD_WLAN_DEVICE_UNITE),UNITE)
 LOCAL_MODULE := libbt-vendor-unite-qca
 else
 LOCAL_MODULE := libbt-vendor
