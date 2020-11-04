@@ -199,9 +199,9 @@ static int get_bt_soc_type()
 
     ALOGI("bt-vendor : get_bt_soc_type");
 
-    ret = property_get("qcom.bluetooth.soc", bt_soc_type, NULL);
+    ret = property_get("vendor.qcom.bluetooth.soc", bt_soc_type, NULL);
     if (ret != 0) {
-        ALOGI("qcom.bluetooth.soc set to %s\n", bt_soc_type);
+        ALOGI("vendor.qcom.bluetooth.soc set to %s\n", bt_soc_type);
         if (!strncasecmp(bt_soc_type, "rome_uart", sizeof("rome_uart"))) {
             return BT_SOC_ROME;
         }
@@ -209,7 +209,7 @@ static int get_bt_soc_type()
             return BT_SOC_AR3K;
         }
         else {
-            ALOGI("qcom.bluetooth.soc not set, so using default.\n");
+            ALOGI("vendor.qcom.bluetooth.soc not set, so using default.\n");
             return BT_SOC_DEFAULT;
         }
     }
@@ -226,7 +226,7 @@ bool can_perform_action(char action) {
     char ref_count[PROPERTY_VALUE_MAX];
     int value, ret;
 
-    property_get("wc_transport.ref_count", ref_count, "0");
+    property_get("vendor.wc_transport.ref_count", ref_count, "0");
 
     value = atoi(ref_count);
     ALOGV("%s: ref_count: %s\n",__func__,  ref_count);
@@ -259,7 +259,7 @@ bool can_perform_action(char action) {
     snprintf(ref_count, 3, "%d", value);
     ALOGV("%s: updated ref_count is: %s", __func__, ref_count);
 
-    ret  = property_set("wc_transport.ref_count", ref_count);
+    ret  = property_set("vendor.wc_transport.ref_count", ref_count);
     if (ret < 0) {
         ALOGE("%s: Error while updating property: %d\n", __func__, ret);
         return false;
@@ -280,7 +280,7 @@ void stop_hci_filter() {
        }
 
        property_set("vendor.wc_transport.start_hci", "false");
-       property_set("wc_transport.hci_filter_status", "0");
+       property_set("vendor.wc_transport.hci_filter_status", "0");
        ALOGV("%s: Exit ", __func__);
 }
 
@@ -297,12 +297,12 @@ void start_hci_filter() {
            return;
        }
 
-       property_set("wc_transport.hci_filter_status", "0");
+       property_set("vendor.wc_transport.hci_filter_status", "0");
 
        property_set("vendor.wc_transport.start_hci", "true");
        //sched_yield();
        for(i=0; i<45; i++) {
-          property_get("wc_transport.hci_filter_status", value, "0");
+          property_get("vendor.wc_transport.hci_filter_status", value, "0");
           if (strcmp(value, "1") == 0) {
                init_success = 1;
                break;
@@ -453,7 +453,7 @@ static int bt_powerup(int en )
     if(on == '0'){
         ALOGE("Stopping HCI filter as part of CTRL:OFF");
         stop_hci_filter();
-        property_set("wc_transport.soc_initialized", "0");
+        property_set("vendor.wc_transport.soc_initialized", "0");
     }
 #endif
 #ifdef WIFI_BT_STATUS_SYNC
@@ -618,15 +618,15 @@ bool is_soc_initialized() {
 
     ALOGI("bt-vendor : is_soc_initialized");
 
-    ret = property_get("wc_transport.soc_initialized", init_value, NULL);
+    ret = property_get("vendor.wc_transport.soc_initialized", init_value, NULL);
     if (ret != 0) {
-        ALOGI("wc_transport.soc_initialized set to %s\n", init_value);
+        ALOGI("vendor.wc_transport.soc_initialized set to %s\n", init_value);
         if (!strncasecmp(init_value, "1", sizeof("1"))) {
             init = true;
         }
     }
     else {
-        ALOGE("%s: Failed to get wc_transport.soc_initialized", __FUNCTION__);
+        ALOGE("%s: Failed to get vendor.wc_transport.soc_initialized", __FUNCTION__);
     }
 
     return init;
@@ -792,7 +792,7 @@ static int op(bt_vendor_opcode_t opcode, void *param)
                                         }
                                     }
                                     ALOGV("rome_soc_init is started");
-                                    property_set("wc_transport.soc_initialized", "0");
+                                    property_set("vendor.wc_transport.soc_initialized", "0");
 #ifdef READ_BT_ADDR_FROM_PROP
                                     /*Give priority to read BD address from boot property*/
                                     ignore_boot_prop = FALSE;
@@ -841,7 +841,7 @@ static int op(bt_vendor_opcode_t opcode, void *param)
                                         userial_clock_operation(fd, USERIAL_OP_CLK_OFF);
                                     } else {
                                         ALOGV("rome_soc_init is completed");
-                                        property_set("wc_transport.soc_initialized", "1");
+                                        property_set("vendor.wc_transport.soc_initialized", "1");
                                         #ifdef QCOM_BT_SIBS_ENABLE
                                         userial_clock_operation(fd, USERIAL_OP_CLK_OFF);
                                         /*Close the UART port*/
@@ -851,7 +851,7 @@ static int op(bt_vendor_opcode_t opcode, void *param)
                                 }
                             }
 
-                            property_set("wc_transport.clean_up","0");
+                            property_set("vendor.wc_transport.clean_up","0");
                             if (retval != -1) {
 #ifdef BT_SOC_TYPE_ROME
                                  #ifdef QCOM_BT_SIBS_ENABLE
@@ -904,7 +904,7 @@ static int op(bt_vendor_opcode_t opcode, void *param)
         case BT_VND_OP_ANT_USERIAL_CLOSE:
             {
                 ALOGI("bt-vendor : BT_VND_OP_ANT_USERIAL_CLOSE");
-                property_set("wc_transport.clean_up","1");
+                property_set("vendor.wc_transport.clean_up","1");
                 if (ant_fd != -1) {
                     ALOGE("closing ant_fd");
                     close(ant_fd);
@@ -924,7 +924,7 @@ static int op(bt_vendor_opcode_t opcode, void *param)
 
                      case BT_SOC_ROME:
                      case BT_SOC_AR3K:
-                        property_set("wc_transport.clean_up","1");
+                        property_set("vendor.wc_transport.clean_up","1");
                         userial_vendor_close();
                         break;
                     default:
@@ -1012,7 +1012,7 @@ static int op(bt_vendor_opcode_t opcode, void *param)
                   case BT_SOC_ROME:
                        {
                            char value[PROPERTY_VALUE_MAX] = {'\0'};
-                           property_get("wc_transport.hci_filter_status", value, "0");
+                           property_get("vendor.wc_transport.hci_filter_status", value, "0");
                            if(is_soc_initialized()&& (strcmp(value,"1") == 0))
                            {
                               hw_epilog_process();
